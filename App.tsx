@@ -7,9 +7,11 @@ import Logger from './src/pages/Logger';
 import TakePictureButton from './src/components/TakePictureButton';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {NavigationContainer} from '@react-navigation/native';
-import {GlobalContext, GlobalProvider} from './src/contexts/GlobalContext';
-import ViewForm from './src/pages/ViewForm';
+import {GlobalContext} from './src/contexts/GlobalContext';
 import usePending from './src/hooks/usePending';
+import 'react-native-url-polyfill/auto';
+import 'react-native-get-random-values';
+import {formatDate} from './src/lib';
 const Tab = createBottomTabNavigator();
 
 function App(): React.JSX.Element {
@@ -17,25 +19,24 @@ function App(): React.JSX.Element {
   const {getImagePending, sendImagePending} = usePending();
 
   const initSendPending = async () => {
-    const threeMins = 3 * 60 * 1000;
+    const fiveSecs = 1 * 60 * 1000;
+
+    const log = async () => {
+      await setLogger(logger => [
+        ...logger,
+        {
+          key: 'initSendPending Start',
+          value: '',
+          time: formatDate(new Date()),
+        },
+      ]);
+    };
 
     const sendPending = async () => {
       try {
-        const images = await getImagePending();
-        if (images.length === 0) {
-          await setLogger(logger => [
-            ...logger,
-            {
-              key: 'Image Pending is empty',
-              value: `${JSON.stringify(images)}`,
-              time: formattedDate,
-            },
-          ]);
-          return;
-        }
-
         await sendImagePending();
       } catch (err) {
+        console.log('err', err);
         await setLogger(logger => [
           ...logger,
           {
@@ -51,54 +52,39 @@ function App(): React.JSX.Element {
       setTimeout(async () => {
         await sendPending();
         sendPendingInterval();
-      }, threeMins);
+      }, fiveSecs);
     };
 
+    log();
     await sendPending();
     sendPendingInterval();
   };
 
   useEffect(() => {
-    const log = async () => {
-      await setLogger(logger => [
-        ...logger,
-        {
-          key: 'initSendPending Start',
-          value: '',
-          time: formattedDate,
-        },
-      ]);
-    };
-
-    log();
     initSendPending();
   }, []);
 
   return (
-    <GlobalProvider>
-      <View style={styles.container}>
-        <View style={styles.mainContent}>
-          {/* Your main content goes here */}
-        </View>
-        <View style={styles.footer}>
-          <NavigationContainer>
-            <Tab.Navigator initialRouteName="Upload">
-              <Tab.Screen name="Logger" component={Logger} />
-              <Tab.Screen name="Pending" component={PendingImages} />
-              <Tab.Screen name="Tasks" component={SuccessUploads} />
-              <Tab.Screen name="Upload" component={TakePictureButton} />
-              <Tab.Screen
+    <View style={styles.container}>
+      <View style={styles.mainContent}></View>
+      <View style={styles.footer}>
+        <NavigationContainer>
+          <Tab.Navigator initialRouteName="Upload">
+            <Tab.Screen name="Logger" component={Logger} />
+            <Tab.Screen name="Pending" component={PendingImages} />
+            <Tab.Screen name="Success" component={SuccessUploads} />
+            <Tab.Screen name="Upload" component={TakePictureButton} />
+            {/* <Tab.Screen
                 name="Form"
                 component={ViewForm}
                 options={{
                   tabBarButton: () => null,
                 }}
-              />
-            </Tab.Navigator>
-          </NavigationContainer>
-        </View>
+              /> */}
+          </Tab.Navigator>
+        </NavigationContainer>
       </View>
-    </GlobalProvider>
+    </View>
   );
 }
 

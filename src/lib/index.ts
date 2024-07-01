@@ -19,7 +19,7 @@ export const formatDate = (date: any) => {
 
 export const mimeTypes = (type: string) => {
   const mimeTypes = {
-    jpg: 'image/jpeg',
+    jpg: 'image/jpg',
     jpeg: 'image/jpeg',
     png: 'image/png',
     gif: 'image/gif',

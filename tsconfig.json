@@ -1,21 +1,14 @@
 {
-  "extends": "@react-native/typescript-config/tsconfig.json",
   "compilerOptions": {
-    "target": "ES6",
-    "module": "commonjs",
-    "strict": true,
+    "target": "esnext",
+    "module": "esnext",
     "jsx": "react-native",
-    "moduleResolution": "node",
-    "allowJs": true,
+    "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true
   },
-  "include": ["src", "types"],
-  "exclude": [
-    "node_modules",
-    "babel.config.js",
-    "metro.config.js",
-    "jest.config.js"
-  ]
+  "include": ["src"]
 }

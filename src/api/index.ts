@@ -1,30 +1,32 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 
-axios.interceptors.request.use(request => {
-  console.log('Starting Request', JSON.stringify(request, null, 2));
-  return request;
-});
-
-axios.interceptors.response.use(
-  response => {
-    console.log('Response:', JSON.stringify(response, null, 2));
-    return response;
-  },
-  error => {
-    console.log('Error Response:', JSON.stringify(error, null, 2));
-    return Promise.reject(error);
-  },
-);
-
 export const getUrl = async () => {
-  return 'https://saas-gw-dev.milgam.co.il:8012/';
-  // return 'http://192.168.1.5:5000/';
+  // return 'https://saas-gw-dev.milgam.co.il:8012/';
+  return 'http://192.168.1.5:5000/';
 };
 
 export const fileServiceUrl = async () => {
-  return 'https://saas-gw-dev.milgam.co.il:8014/';
-  // return 'http://192.168.1.5:8080/';
+  // return 'https://saas-gw-dev.milgam.co.il:8014/';
+  return 'http://192.168.1.5:8080/';
+};
+
+export const generateIdToken = async () => {
+  const url = (await getUrl()) + 'auth/login';
+  let response = await axios({
+    method: 'post',
+    url: url,
+    data: {
+      username: 'admin@agam.client',
+      password: 'Aa12345678',
+    },
+  });
+
+  return response;
+};
+
+export const uploadFileToS3 = async () => {
+  // Provide requirements
 };
 
 export const uploadFileToService = async (
