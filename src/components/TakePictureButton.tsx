@@ -6,9 +6,7 @@ import {
   Image,
   Button,
   Alert,
-  Text,
 } from 'react-native';
-
 import {scale} from '../types/common';
 import {
   ImagePickerResponse,
@@ -20,47 +18,45 @@ import RNFS from 'react-native-fs';
 import CryptoJS from 'crypto-js';
 import {Buffer} from 'buffer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {uploadFileService, uploadFileToService} from '../api';
 import {GlobalContext} from '../contexts/GlobalContext';
 import {FlatList, GestureHandlerRootView} from 'react-native-gesture-handler';
+import {formatDate} from '../lib';
 import {useNavigation} from '@react-navigation/native';
-import SelectDropdown from 'react-native-select-dropdown';
 
 const TakePictureButton = () => {
   const netInfo = useNetInfo();
-  const navigate = useNavigation();
   const globalContext = useContext(GlobalContext);
   const {
     capturedImages,
     setCapturedImages,
-    tasks,
-    setTasks,
     setLogger,
     formattedDate,
-    IdToken,
+    s3,
+    setSuccessUploads,
+    setPendingUploads,
   } = globalContext;
   const [opened, setOpened] = useState(false);
-  const [selectedTaskId, setSelectedTaskId] = useState<number | undefined>(
-    undefined,
-  );
+  const [isProcessing, setIsProcessing] = useState(false);
+  const navigate = useNavigation();
+  const tenant = 'agam';
 
   const storeImageToPending = async (fileName: string, imagePath: string) => {
-    const pendingImages = await AsyncStorage.getItem('pendingImages');
+    const pendingImages = await AsyncStorage.getItem(`pendingImages-${tenant}`);
 
     const pendingImagesJson = pendingImages ? JSON.parse(pendingImages) : [];
-    pendingImagesJson.push({name: fileName, path: imagePath});
+    pendingImagesJson.push({name: fileName, filePath: imagePath});
 
     await AsyncStorage.setItem(
-      'pendingImages',
+      `pendingImages-${tenant}`,
       JSON.stringify(pendingImagesJson),
     );
 
     setLogger(logger => [
       ...logger,
       {
-        key: 'Stored Image To LocalStorage',
-        value: `${JSON.stringify({name: fileName, path: imagePath})}`,
-        time: formattedDate,
+        key: 'Stored image to local storage',
+        value: `${JSON.stringify({name: fileName, filePath: imagePath})}`,
+        time: formatDate(new Date()),
       },
     ]);
   };
@@ -75,6 +71,7 @@ const TakePictureButton = () => {
 
   const handleImage = async (source: 'camera' | 'gallery') => {
     try {
+      setIsProcessing(true);
       const methodMap = {
         camera: launchCamera,
         gallery: launchImageLibrary,
@@ -82,7 +79,7 @@ const TakePictureButton = () => {
 
       await setLogger(logger => [
         ...logger,
-        {key: 'Initialized', value: source, time: formattedDate},
+        {key: 'Initialized', value: source, time: formatDate(new Date())},
       ]);
 
       const response: ImagePickerResponse = await methodMap[source]({
@@ -108,7 +105,11 @@ const TakePictureButton = () => {
       ) {
         await setLogger(logger => [
           ...logger,
-          {key: 'Assets is null', value: response.assets, time: formattedDate},
+          {
+            key: 'Assets is null',
+            value: response.assets,
+            time: formatDate(new Date()),
+          },
         ]);
         return;
       }
@@ -120,7 +121,7 @@ const TakePictureButton = () => {
 
       if (!base64 || !path) return;
 
-      const destinationPath = `${RNFS.PicturesDirectoryPath}/${selectedTaskId}_${name}`;
+      const destinationPath = `${RNFS.PicturesDirectoryPath}/${name}`;
       await RNFS.writeFile(destinationPath, base64, 'base64');
       await RNFS.scanFile(destinationPath);
       const exists = await RNFS.exists(destinationPath);
@@ -130,7 +131,7 @@ const TakePictureButton = () => {
         {
           key: 'Is Image Saved Locally?',
           value: `${JSON.stringify(exists)}`,
-          time: formattedDate,
+          time: formatDate(new Date()),
         },
       ]);
 
@@ -141,7 +142,7 @@ const TakePictureButton = () => {
         {
           key: 'Checksum',
           value: `${JSON.stringify(checksum)}`,
-          time: formattedDate,
+          time: formatDate(new Date()),
         },
       ]);
 
@@ -151,14 +152,14 @@ const TakePictureButton = () => {
           {
             key: 'No Provided Checksum',
             value: '',
-            time: formattedDate,
+            time: formatDate(new Date()),
           },
         ]);
         return;
       }
 
       const fileData = {
-        uri: destinationPath,
+        uri: `file://${destinationPath}`,
         type: type,
         name: name,
       };
@@ -168,7 +169,7 @@ const TakePictureButton = () => {
         {
           key: 'File Data',
           value: `${JSON.stringify(fileData)}`,
-          time: formattedDate,
+          time: formatDate(new Date()),
         },
       ]);
 
@@ -177,7 +178,7 @@ const TakePictureButton = () => {
         {
           key: 'Is Internet Connection Reachable?',
           value: `${JSON.stringify(netInfo.isInternetReachable)}`,
-          time: formattedDate,
+          time: formatDate(new Date()),
         },
       ]);
 
@@ -186,16 +187,28 @@ const TakePictureButton = () => {
         {
           key: 'Is Internet Connection Connected?',
           value: `${JSON.stringify(netInfo.isConnected)}`,
-          time: formattedDate,
+          time: formatDate(new Date()),
         },
       ]);
 
       if (!netInfo.isInternetReachable || !netInfo.isConnected) {
-        return await storeImageToPending(
-          `task/${selectedTaskId}/${fileData.name}`,
-          destinationPath,
-        );
+        await setPendingUploads((pendingUploads: string) => [
+          ...pendingUploads,
+          fileData.uri,
+        ]);
+        return await storeImageToPending(fileData.name, destinationPath);
       }
+
+      const fileBuffer = Buffer.from(base64, 'base64');
+
+      const uploadParams: any = {
+        Bucket: 'ab1-upload-image',
+        Key: name,
+        Body: fileBuffer,
+        ContentType: type,
+      };
+
+      setCapturedImages((capturedImages: any) => [...capturedImages, fileData]);
 
       const timeoutValue = 'timeout';
       const timeout = new Promise((res, rej) => {
@@ -205,22 +218,15 @@ const TakePictureButton = () => {
 
       const result = await Promise.race([
         timeout,
-        uploadFileToService(
-          IdToken,
-          `task/${selectedTaskId}/${fileData.name}`,
-          fileData,
-          checksum,
-        ),
+        s3.upload(uploadParams).promise(),
       ]);
-
-      console.log('result', JSON.stringify(result));
 
       await setLogger(logger => [
         ...logger,
         {
           key: 'Image Upload Result',
           value: `${JSON.stringify(result)}`,
-          time: formattedDate,
+          time: formatDate(new Date()),
         },
       ]);
 
@@ -230,47 +236,50 @@ const TakePictureButton = () => {
           {
             key: 'Result is error or has reached timeout',
             value: `${JSON.stringify(result)}`,
-            time: formattedDate,
+            time: formatDate(new Date()),
           },
         ]);
-        await storeImageToPending(
-          `task/${selectedTaskId}/${fileData.name}`,
-          destinationPath,
-        );
+        await storeImageToPending(fileData.name, destinationPath);
+        await setPendingUploads((pendingUploads: string) => [
+          ...pendingUploads,
+          fileData.uri,
+        ]);
+      } else {
+        await setLogger(logger => [
+          ...logger,
+          {
+            key: 'Image Uploaded Successfully!',
+            value: `${JSON.stringify(result.Location)}`,
+            time: formatDate(new Date()),
+          },
+        ]);
+        setSuccessUploads((successUploads: any) => [
+          ...successUploads,
+          result.Location,
+        ]);
       }
-
-      setCapturedImages((capturedImages: any) => [...capturedImages, fileData]);
     } catch (err) {
       await setLogger(logger => [
         ...logger,
         {
           key: 'Error during image handling',
           value: `${JSON.stringify(err)}`,
-          time: formattedDate,
+          time: formatDate(new Date()),
         },
       ]);
       return {err};
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const handleSubmit = async () => {
     try {
       if (capturedImages.length === 0) return;
-      let images = [];
-      for (const image of capturedImages) {
-        images.push(image.name);
-      }
-
-      const task = tasks.find((item: any) => item.id === selectedTaskId);
-      const updatedTasks = tasks.map((task: any) =>
-        task.id === selectedTaskId ? {...task, images: images} : task,
-      );
-
-      setTasks(updatedTasks);
 
       Alert.alert(
         `Success`,
-        `Task ID ${task.id} has been added`,
+        `Images has been added`,
         [
           {
             text: 'OK',
@@ -288,10 +297,6 @@ const TakePictureButton = () => {
     }
   };
 
-  const handleTaskChange = (index: number) => {
-    setSelectedTaskId(index);
-  };
-
   const renderItem = ({item}: any) => (
     <Image
       style={styles.image}
@@ -306,48 +311,17 @@ const TakePictureButton = () => {
         <TouchableOpacity
           style={styles.btn}
           onPress={() => {
-            setOpened(!opened);
-            handleImage('camera');
-          }}>
+            if (!isProcessing) {
+              setOpened(!opened);
+              handleImage('camera');
+            }
+          }}
+          disabled={isProcessing}>
           <Image
             style={[styles.ico]}
             source={require('../assets/tmp/camera-ico.png')}
           />
         </TouchableOpacity>
-        <SelectDropdown
-          data={tasks}
-          onSelect={(selectedItem, index) => {
-            handleTaskChange(selectedItem.id);
-          }}
-          renderButton={(selectedItem, isOpened) => {
-            return (
-              <View style={styles.dropdownButtonStyle}>
-                <Text style={styles.dropdownButtonTxtStyle}>
-                  {(selectedItem && `Task ID: ${selectedItem.id}`) ||
-                    'Select Task ID'}
-                </Text>
-                <Text style={styles.dropdownButtonArrowStyle}>
-                  {isOpened ? '▲' : '▼'}
-                </Text>
-              </View>
-            );
-          }}
-          renderItem={(item, index, isSelected) => {
-            return (
-              <View
-                style={{
-                  ...styles.dropdownItemStyle,
-                  ...(isSelected && {backgroundColor: '#D2D9DF'}),
-                }}>
-                <Text style={styles.dropdownItemTxtStyle}>
-                  Task ID: {item.id}
-                </Text>
-              </View>
-            );
-          }}
-          showsVerticalScrollIndicator={false}
-          dropdownStyle={styles.dropdownMenuStyle}
-        />
         <FlatList
           data={capturedImages}
           renderItem={renderItem}
@@ -359,9 +333,9 @@ const TakePictureButton = () => {
           <View style={styles.buttonContainer}>
             <Button title="Refresh" onPress={() => setCapturedImages([])} />
           </View>
-          <View style={styles.buttonContainer}>
-            <Button title="Submit" onPress={handleSubmit} />
-          </View>
+          {/* <View style={styles.buttonContainer}>
+            <Button title="Submit" onPress={() => handleSubmit()} />
+          </View> */}
         </View>
       </View>
     </GestureHandlerRootView>

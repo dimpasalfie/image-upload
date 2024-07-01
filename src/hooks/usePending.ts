@@ -2,19 +2,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useContext} from 'react';
 import RNFS from 'react-native-fs';
 import {GlobalContext} from '../contexts/GlobalContext';
-import axios from 'axios';
-import {mimeTypes} from '../lib';
-import {getBlob, getImageFromAmazon, uploadFileToService} from '../api';
+import {formatDate, mimeTypes} from '../lib';
+import {uploadFileToService} from '../api';
+import {Buffer} from 'buffer';
+import CryptoJS from 'crypto-js';
+import {S3} from 'aws-sdk';
 
 type PendingImage = {
   name: string;
   filePath: string;
 };
 
-const _getIdToken = async () => {
-  return await AsyncStorage.getItem('IdToken');
-};
-
+const date = new Date();
 const generateChecksum = async (base64: string) => {
   const buffer = Buffer.from(base64, 'base64');
   const wordArray = CryptoJS.lib.WordArray.create(buffer);
@@ -23,38 +22,14 @@ const generateChecksum = async (base64: string) => {
   return hash;
 };
 
-const checkImageUploadStatus = async ({
-  taskId,
-  fileName,
-  filePath,
-}: {
-  taskId: number;
-  fileName: string;
-  filePath: string;
-}) => {
-  try {
-    const token = await _getIdToken();
-
-    if (!token) return false;
-
-    const result = await getImageFromAmazon(token, taskId, fileName);
-
-    if (!result.presignedUrl) return false;
-
-    const {headers} = await axios.get(result.presignedUrl);
-
-    const originalImage = await getBlob(filePath);
-
-    if (!originalImage?.size || !headers['content-length']) return false;
-
-    return true;
-  } catch (error) {
-    return false;
-  }
-};
-
 const usePending = () => {
-  const {IdToken, setLogger, formattedDate} = useContext(GlobalContext);
+  const {
+    setLogger,
+    successUploads,
+    setSuccessUploads,
+    formattedDate,
+    setPendingUploads,
+  } = useContext(GlobalContext);
   const tenant = 'agam';
 
   const getImagePending = async () => {
@@ -94,31 +69,18 @@ const usePending = () => {
       ...logger,
       {
         key: 'Accessing sendImagePending',
-        value: `${JSON.stringify(images)}`,
-        time: formattedDate,
-      },
-    ]);
-    const IdToken = await _getIdToken();
-    await setLogger(logger => [
-      ...logger,
-      {
-        key: 'IdToken is empty',
         value: '',
-        time: formattedDate,
+        time: formatDate(new Date()),
       },
     ]);
-    if (!IdToken) {
-      return;
-    }
 
     const images = await getImagePending();
-
     await setLogger(logger => [
       ...logger,
       {
-        key: 'Pending Images',
+        key: 'Getting images from local storage',
         value: `${JSON.stringify(images)}`,
-        time: formattedDate,
+        time: formatDate(new Date()),
       },
     ]);
 
@@ -126,15 +88,16 @@ const usePending = () => {
 
     for (const index in images) {
       const item = images[index];
-
-      await setLogger(logger => [
-        ...logger,
-        {
-          key: 'Pending Image (Singular)',
-          value: `${JSON.stringify(item)}`,
-          time: formattedDate,
-        },
-      ]);
+      if (item) {
+        await setLogger(logger => [
+          ...logger,
+          {
+            key: 'Pending Image Object',
+            value: `${JSON.stringify(item ?? '')}`,
+            time: formatDate(new Date()),
+          },
+        ]);
+      }
 
       try {
         const base64 = await RNFS.readFile(item.filePath, 'base64').then(
@@ -148,46 +111,38 @@ const usePending = () => {
           {
             key: 'usePending Checksum',
             value: `${JSON.stringify(checksum)}`,
-            time: formattedDate,
+            time: formatDate(new Date()),
           },
         ]);
 
-        const ext = item.filePath.split('.').pop()?.toLowerCase();
-        const mime = await mimeTypes(ext);
+        const fileBuffer = Buffer.from(base64, 'base64');
 
-        const fileData = {
-          uri: item.filePath,
-          type: mime,
-          name: item.name,
+        const s3 = {};
+
+        const uploadParams: any = {
+          Bucket: 'ab1-upload-image',
+          Key: item.name,
+          Body: fileBuffer,
+          ContentType: 'application/octet-stream',
         };
 
-        await setLogger(logger => [
-          ...logger,
-          {
-            key: 'usePending File Data',
-            value: `${JSON.stringify(fileData)}`,
-            time: formattedDate,
-          },
-        ]);
-
-        // const blob = await getBlob(item.filePath);
-        const result = await uploadFileToService(
-          IdToken,
-          item.name,
-          fileData,
-          checksum,
-        );
+        const result = await s3.upload(uploadParams).promise();
 
         await setLogger(logger => [
           ...logger,
           {
             key: 'usePending Upload Result',
             value: `${JSON.stringify(result)}`,
-            time: formattedDate,
+            time: formatDate(new Date()),
           },
         ]);
 
-        if (result) {
+        if (result.Location) {
+          await setSuccessUploads((successUploads: string) => [
+            ...successUploads,
+            result.Location,
+          ]);
+
           successImages.push(item);
         }
       } catch (err) {
@@ -195,40 +150,40 @@ const usePending = () => {
       }
     }
 
-    const successUploads: PendingImage[] = [];
+    const successUploadsImgs: PendingImage[] = [];
 
     for (const item of successImages) {
-      await setLogger(logger => [
-        ...logger,
-        {
-          key: 'Success Upload Image To s3',
-          value: `${JSON.stringify(item)}`,
-          time: formattedDate,
-        },
-      ]);
+      if (item) {
+        await setLogger(logger => [
+          ...logger,
+          {
+            key: 'Success Uploads',
+            value: `${JSON.stringify(item)}`,
+            time: formatDate(new Date()),
+          },
+        ]);
+      }
 
-      const [_, taskId, name] = item.name.split('/');
+      //   const [_, taskId, name] = item.name.split('/');
 
-      const uploadCheck = await checkImageUploadStatus({
-        taskId: +taskId,
-        filePath: item.filePath,
-        fileName: name,
-      });
+      //   const uploadCheck = await checkImageUploadStatus({
+      //     taskId: +taskId,
+      //     filePath: item.filePath,
+      //     fileName: name,
+      //   });
 
-      await setLogger(logger => [
-        ...logger,
-        {
-          key: 'initialized checkImageUploadStatus',
-          value: `${JSON.stringify(uploadCheck)}`,
-          time: formattedDate,
-        },
-      ]);
+      //   await setLogger(logger => [
+      //     ...logger,
+      //     {
+      //       key: 'initialized checkImageUploadStatus',
+      //       value: `${JSON.stringify(uploadCheck)}`,
+      //       time: formattedDate,
+      //     },
+      //   ]);
 
-      if (uploadCheck) successUploads.push(item);
+      successUploadsImgs.push(item);
     }
-
-    const successUploadsPaths = successUploads.map(item => item.filePath);
-
+    const successUploadsPaths = successUploadsImgs.map(item => item.filePath);
     const remainingImages = images.filter(
       item => !successUploadsPaths.includes(item.filePath),
     );
@@ -238,7 +193,7 @@ const usePending = () => {
       {
         key: 'Remaining Images',
         value: `${JSON.stringify(remainingImages)}`,
-        time: formattedDate,
+        time: formatDate(new Date()),
       },
     ]);
 
@@ -246,6 +201,8 @@ const usePending = () => {
       `pendingImages-${tenant}`,
       JSON.stringify(remainingImages),
     );
+
+    setPendingUploads(remainingImages);
   };
 
   return {

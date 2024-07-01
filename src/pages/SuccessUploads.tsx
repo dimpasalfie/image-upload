@@ -1,49 +1,44 @@
-import React, {useContext} from 'react';
-import {ScrollView, View, Text, StyleSheet} from 'react-native';
-import {SafeAreaView} from 'react-native-safe-area-context';
+import React, {useContext, useEffect, useState} from 'react';
+import {ScrollView, View, Text, StyleSheet, Image, Button} from 'react-native';
 import {GlobalContext} from '../contexts/GlobalContext';
-import {useNavigation} from '@react-navigation/native';
-import {
-  GestureHandlerRootView,
-  TouchableOpacity,
-} from 'react-native-gesture-handler';
+import {FlatList, GestureHandlerRootView} from 'react-native-gesture-handler';
 
 const SuccessUploads = () => {
-  const {tasks} = useContext(GlobalContext);
-  const navigation = useNavigation();
-
-  const navigateToViewForm = (item: any) => {
-    navigation.navigate('Form', {item});
-  };
-
-  const handleNavigation = (item: any) => {
-    navigateToViewForm(item);
-  };
+  const {successUploads, setSuccessUploads} = useContext(GlobalContext);
+  const renderItem = ({item}: any) => (
+    <Image
+      style={styles.image}
+      source={{uri: item}}
+      onError={e => console.error(`Failed to load image: ${item.uri}`, e)}
+    />
+  );
 
   return (
-    <GestureHandlerRootView>
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        style={styles.scrollView}>
-        {tasks.map((item: any, index: number) => {
-          return (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.box}
-              onPress={() => handleNavigation(item)}>
-              <View style={styles.boxHeader}>
-                <Text style={styles.boxTitle}>Task ID: {item.id}</Text>
-                <Text># of images - {item.images.length}</Text>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+    <GestureHandlerRootView style={styles.container}>
+      <View style={styles.button}>
+        <Button title="Clear Images" onPress={() => setSuccessUploads([])} />
+      </View>
+      {successUploads.length === 0 ? (
+        <View style={styles.isEmpty}>
+          <Text style={styles.textEmpty}>No Data Available</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={successUploads}
+          renderItem={renderItem}
+          keyExtractor={(item, index) => index.toString()}
+          numColumns={3}
+          contentContainerStyle={styles.grid}
+        />
+      )}
     </GestureHandlerRootView>
   );
 };
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   scrollView: {
     padding: 10,
   },
@@ -73,6 +68,28 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 10,
+  },
+  grid: {
+    justifyContent: 'center',
+  },
+  image: {
+    width: 120,
+    height: 150,
+    margin: 3,
+  },
+  button: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    zIndex: 9999,
+  },
+  isEmpty: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  textEmpty: {
+    fontSize: 30,
   },
 });
 
