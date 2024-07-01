@@ -8,11 +8,8 @@ export const GlobalContext = createContext<any>({});
 export const GlobalProvider = ({children}: any) => {
   const [logger, setLogger] = useState<any[]>([]);
   const [capturedImages, setCapturedImages] = useState<any[]>([]);
-  const [successUploads, setSuccessUploads] = useState<any[]>([]);
   const [pendingUploads, setPendingUploads] = useState<any[]>([]);
   const [images, setImages] = useState<any[]>([]);
-
-  console.log('successUploads', successUploads);
 
   const s3 = {};
 
@@ -30,8 +27,6 @@ export const GlobalProvider = ({children}: any) => {
         images,
         setImages,
         s3,
-        setSuccessUploads,
-        successUploads,
         setPendingUploads,
         pendingUploads,
       }}>

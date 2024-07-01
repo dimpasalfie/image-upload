@@ -2,8 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useContext} from 'react';
 import RNFS from 'react-native-fs';
 import {GlobalContext} from '../contexts/GlobalContext';
-import {formatDate, mimeTypes} from '../lib';
-import {uploadFileToService} from '../api';
+import {formatDate} from '../lib';
 import {Buffer} from 'buffer';
 import CryptoJS from 'crypto-js';
 import {S3} from 'aws-sdk';
@@ -13,7 +12,6 @@ type PendingImage = {
   filePath: string;
 };
 
-const date = new Date();
 const generateChecksum = async (base64: string) => {
   const buffer = Buffer.from(base64, 'base64');
   const wordArray = CryptoJS.lib.WordArray.create(buffer);
@@ -23,13 +21,8 @@ const generateChecksum = async (base64: string) => {
 };
 
 const usePending = () => {
-  const {
-    setLogger,
-    successUploads,
-    setSuccessUploads,
-    formattedDate,
-    setPendingUploads,
-  } = useContext(GlobalContext);
+  const {setLogger, setSuccessUploads, setPendingUploads} =
+    useContext(GlobalContext);
   const tenant = 'agam';
 
   const getImagePending = async () => {

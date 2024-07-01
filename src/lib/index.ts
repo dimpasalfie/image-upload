@@ -1,3 +1,7 @@
+import {ImagePickerResponse} from 'react-native-image-picker';
+import ImageResizer from 'react-native-image-resizer';
+import {Image as ImageCompressor} from 'react-native-compressor';
+
 export const generateTaskId = () => {
   const date = new Date();
   const seed = date.getTime();
@@ -38,4 +42,70 @@ export const mimeTypes = (type: string) => {
   };
 
   return mimeTypes[type.toLowerCase()];
+};
+
+export const resizeImage = async (path: ImagePickerResponse) => {
+  try {
+    if (path) {
+      const resizedImage = await ImageResizer.createResizedImage(
+        path,
+        300,
+        300,
+        'JPEG',
+        50,
+      );
+
+      const imageSize: any = await getImageSize(resizedImage.uri);
+
+      if (imageSize > 50 * 1024) {
+        const furtherCompressedImage = await ImageResizer.createResizedImage(
+          resizedImage.uri,
+          300,
+          300,
+          'JPEG',
+          30,
+        );
+        return furtherCompressedImage;
+      }
+
+      return resizedImage;
+    }
+  } catch (error) {
+    console.error(error);
+    return {error};
+  }
+};
+
+export const getImageSize = async (uri: string) => {
+  return new Promise((resolve, reject) => {
+    fetch(uri)
+      .then(response => response.blob())
+      .then(blob => {
+        resolve(blob.size);
+      })
+      .catch(err => {
+        reject(err);
+      });
+  });
+};
+
+export const compressImageToMaxSize = async (
+  path: string,
+  maxSize: number = 50 * 1024,
+): Promise<string | null> => {
+  let compressedImageUri = path;
+  let imageSize: any = await getImageSize(compressedImageUri);
+
+  while (imageSize > maxSize) {
+    compressedImageUri = await ImageCompressor.compress(compressedImageUri, {
+      compressionMethod: 'auto',
+    });
+    imageSize = await getImageSize(compressedImageUri);
+
+    if (imageSize === (await getImageSize(path))) {
+      break;
+    }
+  }
+
+  return imageSize <= maxSize ? compressedImageUri : null;
 };

@@ -1,12 +1,5 @@
 import React, {Fragment, useContext, useState} from 'react';
-import {
-  View,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-  Button,
-  Alert,
-} from 'react-native';
+import {View, TouchableOpacity, StyleSheet, Image, Button} from 'react-native';
 import {scale} from '../types/common';
 import {
   ImagePickerResponse,
@@ -20,24 +13,15 @@ import {Buffer} from 'buffer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {GlobalContext} from '../contexts/GlobalContext';
 import {FlatList, GestureHandlerRootView} from 'react-native-gesture-handler';
-import {formatDate} from '../lib';
-import {useNavigation} from '@react-navigation/native';
+import {compressImageToMaxSize, formatDate} from '../lib';
 
 const TakePictureButton = () => {
   const netInfo = useNetInfo();
   const globalContext = useContext(GlobalContext);
-  const {
-    capturedImages,
-    setCapturedImages,
-    setLogger,
-    formattedDate,
-    s3,
-    setSuccessUploads,
-    setPendingUploads,
-  } = globalContext;
+  const {capturedImages, setCapturedImages, setLogger, s3, setPendingUploads} =
+    globalContext;
   const [opened, setOpened] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const navigate = useNavigation();
   const tenant = 'agam';
 
   const storeImageToPending = async (fileName: string, imagePath: string) => {
@@ -59,6 +43,18 @@ const TakePictureButton = () => {
         time: formatDate(new Date()),
       },
     ]);
+  };
+
+  const storeSuccessUploads = async (imagePath: string) => {
+    const successImages = await AsyncStorage.getItem(`successImages-${tenant}`);
+
+    const succcessImages = successImages ? JSON.parse(successImages) : [];
+    succcessImages.push(imagePath);
+
+    await AsyncStorage.setItem(
+      `successImages-${tenant}`,
+      JSON.stringify(succcessImages),
+    );
   };
 
   const generateChecksum = async (base64: string) => {
@@ -121,8 +117,10 @@ const TakePictureButton = () => {
 
       if (!base64 || !path) return;
 
+      const compressImage: any = await compressImageToMaxSize(path, 50 * 1024);
+      const compressedBase64 = await RNFS.readFile(compressImage, 'base64');
       const destinationPath = `${RNFS.PicturesDirectoryPath}/${name}`;
-      await RNFS.writeFile(destinationPath, base64, 'base64');
+      await RNFS.writeFile(destinationPath, compressedBase64, 'base64');
       await RNFS.scanFile(destinationPath);
       const exists = await RNFS.exists(destinationPath);
 
@@ -135,7 +133,7 @@ const TakePictureButton = () => {
         },
       ]);
 
-      const checksum = await generateChecksum(base64);
+      const checksum = await generateChecksum(compressedBase64);
 
       await setLogger(logger => [
         ...logger,
@@ -163,6 +161,8 @@ const TakePictureButton = () => {
         type: type,
         name: name,
       };
+
+      setCapturedImages((capturedImages: any) => [...capturedImages, fileData]);
 
       await setLogger(logger => [
         ...logger,
@@ -199,7 +199,7 @@ const TakePictureButton = () => {
         return await storeImageToPending(fileData.name, destinationPath);
       }
 
-      const fileBuffer = Buffer.from(base64, 'base64');
+      const fileBuffer = Buffer.from(compressedBase64, 'base64');
 
       const uploadParams: any = {
         Bucket: 'ab1-upload-image',
@@ -207,8 +207,6 @@ const TakePictureButton = () => {
         Body: fileBuffer,
         ContentType: type,
       };
-
-      setCapturedImages((capturedImages: any) => [...capturedImages, fileData]);
 
       const timeoutValue = 'timeout';
       const timeout = new Promise((res, rej) => {
@@ -253,17 +251,14 @@ const TakePictureButton = () => {
             time: formatDate(new Date()),
           },
         ]);
-        setSuccessUploads((successUploads: any) => [
-          ...successUploads,
-          result.Location,
-        ]);
+        await storeSuccessUploads(result.Location);
       }
     } catch (err) {
       await setLogger(logger => [
         ...logger,
         {
           key: 'Error during image handling',
-          value: `${JSON.stringify(err)}`,
+          value: '',
           time: formatDate(new Date()),
         },
       ]);
@@ -273,29 +268,29 @@ const TakePictureButton = () => {
     }
   };
 
-  const handleSubmit = async () => {
-    try {
-      if (capturedImages.length === 0) return;
+  // const handleSubmit = async () => {
+  //   try {
+  //     if (capturedImages.length === 0) return;
 
-      Alert.alert(
-        `Success`,
-        `Images has been added`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              navigate.navigate('Tasks');
-            },
-          },
-        ],
-        {cancelable: false},
-      );
+  //     Alert.alert(
+  //       `Success`,
+  //       `Images has been added`,
+  //       [
+  //         {`
+  //           text: 'OK',
+  //           onPress: () => {
+  //             navigate.navigate('Tasks');
+  //           },
+  //         },
+  //       ],
+  //       {cancelable: false},
+  //     );
 
-      setCapturedImages([]);
-    } catch (err) {
-      console.log('err', err);
-    }
-  };
+  //     setCapturedImages([]);
+  //   } catch (err) {
+  //     console.log('err', err);
+  //   }
+  // };
 
   const renderItem = ({item}: any) => (
     <Image

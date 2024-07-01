@@ -1,10 +1,30 @@
-import React, {useContext, useEffect, useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {ScrollView, View, Text, StyleSheet, Image, Button} from 'react-native';
 import {GlobalContext} from '../contexts/GlobalContext';
 import {FlatList, GestureHandlerRootView} from 'react-native-gesture-handler';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+type PendingImage = {
+  name: string;
+  filePath: string;
+};
 
 const SuccessUploads = () => {
-  const {successUploads, setSuccessUploads} = useContext(GlobalContext);
+  const [images, setImages] = useState<any[]>([]);
+  const tenant = 'agam';
+
+  useEffect(() => {
+    const getSuccessUploads = async () => {
+      const images =
+        (await AsyncStorage.getItem(`successImages-${tenant}`)) ?? '[]';
+
+      const imageJson: PendingImage[] = JSON.parse(images);
+      setImages(imageJson);
+    };
+
+    getSuccessUploads();
+  }, []);
+
   const renderItem = ({item}: any) => (
     <Image
       style={styles.image}
@@ -13,18 +33,22 @@ const SuccessUploads = () => {
     />
   );
 
+  const handleRemoveItems = async () => {
+    await AsyncStorage.removeItem(`successImages-${tenant}`);
+  };
+
   return (
     <GestureHandlerRootView style={styles.container}>
       <View style={styles.button}>
-        <Button title="Clear Images" onPress={() => setSuccessUploads([])} />
+        <Button title="Clear Images" onPress={handleRemoveItems} />
       </View>
-      {successUploads.length === 0 ? (
+      {images.length === 0 ? (
         <View style={styles.isEmpty}>
           <Text style={styles.textEmpty}>No Data Available</Text>
         </View>
       ) : (
         <FlatList
-          data={successUploads}
+          data={images}
           renderItem={renderItem}
           keyExtractor={(item, index) => index.toString()}
           numColumns={3}
