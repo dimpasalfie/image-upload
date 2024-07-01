@@ -1,32 +1,78 @@
-import React, {useState} from 'react';
-import type {PropsWithChildren} from 'react';
-import {
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  useColorScheme,
-  View,
-} from 'react-native';
+import React, {useContext, useEffect, useState} from 'react';
+import {StyleSheet, View} from 'react-native';
 
-import {Colors} from 'react-native/Libraries/NewAppScreen';
-import {createStackNavigator} from '@react-navigation/stack';
 import SuccessUploads from './src/pages/SuccessUploads';
 import PendingImages from './src/pages/PendingImages';
 import Logger from './src/pages/Logger';
-// import {NavigationContainer} from '@react-navigation/native';
 import TakePictureButton from './src/components/TakePictureButton';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {NavigationContainer} from '@react-navigation/native';
-import {GlobalProvider} from './src/contexts/GlobalContext';
-
+import {GlobalContext, GlobalProvider} from './src/contexts/GlobalContext';
+import ViewForm from './src/pages/ViewForm';
+import usePending from './src/hooks/usePending';
 const Tab = createBottomTabNavigator();
 
-// const {Navigator, Screen} = createStackNavigator();
-
 function App(): React.JSX.Element {
-  // const [images, setImages] = useState<any[]>([]);
+  const {tasks, setLogger, formattedDate} = useContext(GlobalContext);
+  const {getImagePending, sendImagePending} = usePending();
+
+  const initSendPending = async () => {
+    const threeMins = 3 * 60 * 1000;
+
+    const sendPending = async () => {
+      try {
+        const images = await getImagePending();
+        if (images.length === 0) {
+          await setLogger(logger => [
+            ...logger,
+            {
+              key: 'Image Pending is empty',
+              value: `${JSON.stringify(images)}`,
+              time: formattedDate,
+            },
+          ]);
+          return;
+        }
+
+        await sendImagePending();
+      } catch (err) {
+        await setLogger(logger => [
+          ...logger,
+          {
+            key: 'Error initSendPending',
+            value: `${JSON.stringify(err)}`,
+            time: formattedDate,
+          },
+        ]);
+      }
+    };
+
+    const sendPendingInterval = () => {
+      setTimeout(async () => {
+        await sendPending();
+        sendPendingInterval();
+      }, threeMins);
+    };
+
+    await sendPending();
+    sendPendingInterval();
+  };
+
+  useEffect(() => {
+    const log = async () => {
+      await setLogger(logger => [
+        ...logger,
+        {
+          key: 'initSendPending Start',
+          value: '',
+          time: formattedDate,
+        },
+      ]);
+    };
+
+    log();
+    initSendPending();
+  }, []);
 
   return (
     <GlobalProvider>
@@ -39,8 +85,15 @@ function App(): React.JSX.Element {
             <Tab.Navigator initialRouteName="Upload">
               <Tab.Screen name="Logger" component={Logger} />
               <Tab.Screen name="Pending" component={PendingImages} />
-              <Tab.Screen name="Success" component={SuccessUploads} />
+              <Tab.Screen name="Tasks" component={SuccessUploads} />
               <Tab.Screen name="Upload" component={TakePictureButton} />
+              <Tab.Screen
+                name="Form"
+                component={ViewForm}
+                options={{
+                  tabBarButton: () => null,
+                }}
+              />
             </Tab.Navigator>
           </NavigationContainer>
         </View>
@@ -59,6 +112,9 @@ const styles = StyleSheet.create({
   },
   footer: {
     flex: 70,
+  },
+  tabBar: {
+    backgroundColor: '#ffffff',
   },
 });
 
