@@ -35,18 +35,20 @@ const TakePictureButton = () => {
   const tenant = 'agam';
 
   useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener((state: any) => {
-      setIsConnected(state.isConnected && state.isInternetReachable);
+    NetInfo.addEventListener((state: any) => {
+      if (state.isConnected == false || state.isInternetReachable == false) {
+        setIsConnected(false);
+      } else {
+        setIsConnected(true);
+      }
     });
-
-    unsubscribe();
   }, []);
 
   useEffect(() => {
     setLogger(logger => [
       ...logger,
       {
-        key: 'Checking Internet Connection',
+        key: 'Checks internet connection',
         value: `${JSON.stringify(isConnected)}`,
         time: formatDate(new Date()),
       },
@@ -151,8 +153,8 @@ const TakePictureButton = () => {
 
       const resizedImage = await ImageResizer.createResizedImage(
         path,
-        1000,
-        1000,
+        2000,
+        2000,
         'JPEG',
         100,
       );
@@ -262,7 +264,7 @@ const TakePictureButton = () => {
       await setLogger(logger => [
         ...logger,
         {
-          key: 'Image Upload Result',
+          key: 'Image upload result from promise race',
           value: `${JSON.stringify(result)}`,
           time: formatDate(new Date()),
         },

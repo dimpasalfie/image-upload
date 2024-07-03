@@ -12,6 +12,7 @@ export const GlobalProvider = ({children}: any) => {
   const [images, setImages] = useState<any[]>([]);
 
   const s3 = {};
+
   const date = new Date();
   const formattedDate = formatDate(date);
 
