@@ -1,32 +1,50 @@
-import React, {useContext, useEffect, useState} from 'react';
-import {ScrollView, View, Text, StyleSheet, Image, Button} from 'react-native';
+import React, {useEffect, useState} from 'react';
+import {View, Text, StyleSheet, Image, Button} from 'react-native';
 import {FlatList, GestureHandlerRootView} from 'react-native-gesture-handler';
-import {GlobalContext} from '../contexts/GlobalContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const PendingImages = () => {
-  const {pendingUploads, setPendingUploads} = useContext(GlobalContext);
+  const [images, setImages] = useState<any[]>([]);
+  const tenant = 'agam';
 
-  const renderItem = ({item}: any) => (
+  const getPendingImages = async () => {
+    try {
+      const imagesJSON = await AsyncStorage.getItem(`pendingImages-${tenant}`);
+      const imageList = imagesJSON ? JSON.parse(imagesJSON) : [];
+      setImages(imageList);
+    } catch (error) {
+      console.log('Error retrieving images:', error);
+    }
+  };
+
+  useEffect(() => {
+    getPendingImages();
+  }, [tenant]);
+
+  const renderItem = ({item}: {item: string}) => (
     <Image
       style={styles.image}
-      source={{uri: item}}
-      onError={e => console.error(`Failed to load image: ${item.uri}`, e)}
+      source={{uri: `file://${item.filePath}`}}
+      onError={e => console.log(`Failed to load image: ${item}`, e)}
     />
   );
+
+  const reloadPage = () => {
+    getPendingImages();
+  };
 
   return (
     <GestureHandlerRootView style={styles.container}>
       <View style={styles.button}>
-        <Button title="Clear Images" onPress={() => setPendingUploads([])} />
+        <Button title="Reload Page" onPress={reloadPage} />
       </View>
-      {pendingUploads.length === 0 ? (
+      {images.length === 0 ? (
         <View style={styles.isEmpty}>
           <Text style={styles.textEmpty}>No Data Available</Text>
         </View>
       ) : (
         <FlatList
-          data={pendingUploads}
+          data={images}
           renderItem={renderItem}
           keyExtractor={(item, index) => index.toString()}
           numColumns={3}

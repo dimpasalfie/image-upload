@@ -12,14 +12,17 @@ import usePending from './src/hooks/usePending';
 import 'react-native-url-polyfill/auto';
 import 'react-native-get-random-values';
 import {formatDate} from './src/lib';
+import NetInfo from '@react-native-community/netinfo';
+
 const Tab = createBottomTabNavigator();
 
 function App(): React.JSX.Element {
   const {tasks, setLogger, formattedDate} = useContext(GlobalContext);
   const {getImagePending, sendImagePending} = usePending();
+  const [isConnected, setIsConnected] = useState(false);
 
   const initSendPending = async () => {
-    const fiveSecs = 1 * 60 * 1000;
+    const oneMin = 1 * 60 * 1000;
 
     const log = async () => {
       await setLogger(logger => [
@@ -50,19 +53,33 @@ function App(): React.JSX.Element {
 
     const sendPendingInterval = () => {
       setTimeout(async () => {
-        await sendPending();
+        if (isConnected) {
+          log();
+          await sendPending();
+        }
         sendPendingInterval();
-      }, fiveSecs);
+      }, oneMin);
     };
 
-    log();
-    await sendPending();
-    sendPendingInterval();
+    if (isConnected) {
+      await sendPending();
+      sendPendingInterval();
+    }
   };
 
   useEffect(() => {
-    initSendPending();
+    const unsubscribe = NetInfo.addEventListener((state: any) => {
+      setIsConnected(state.isConnected && state.isInternetReachable);
+    });
+
+    unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (isConnected) {
+      initSendPending();
+    }
+  }, [isConnected]);
 
   return (
     <View style={styles.container}>
@@ -74,13 +91,6 @@ function App(): React.JSX.Element {
             <Tab.Screen name="Pending" component={PendingImages} />
             <Tab.Screen name="Success" component={SuccessUploads} />
             <Tab.Screen name="Upload" component={TakePictureButton} />
-            {/* <Tab.Screen
-                name="Form"
-                component={ViewForm}
-                options={{
-                  tabBarButton: () => null,
-                }}
-              /> */}
           </Tab.Navigator>
         </NavigationContainer>
       </View>

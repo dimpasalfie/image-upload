@@ -1,5 +1,12 @@
-import React, {Fragment, useContext, useState} from 'react';
-import {View, TouchableOpacity, StyleSheet, Image, Button} from 'react-native';
+import React, {Fragment, useContext, useEffect, useState} from 'react';
+import {
+  View,
+  TouchableOpacity,
+  StyleSheet,
+  Image,
+  Button,
+  ActivityIndicator,
+} from 'react-native';
 import {scale} from '../types/common';
 import {
   ImagePickerResponse,
@@ -14,6 +21,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {GlobalContext} from '../contexts/GlobalContext';
 import {FlatList, GestureHandlerRootView} from 'react-native-gesture-handler';
 import {compressImageToMaxSize, formatDate} from '../lib';
+import ImageResizer from 'react-native-image-resizer';
+import NetInfo from '@react-native-community/netinfo';
 
 const TakePictureButton = () => {
   const netInfo = useNetInfo();
@@ -22,7 +31,27 @@ const TakePictureButton = () => {
     globalContext;
   const [opened, setOpened] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
   const tenant = 'agam';
+
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state: any) => {
+      setIsConnected(state.isConnected && state.isInternetReachable);
+    });
+
+    unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    setLogger(logger => [
+      ...logger,
+      {
+        key: 'Checking Internet Connection',
+        value: `${JSON.stringify(isConnected)}`,
+        time: formatDate(new Date()),
+      },
+    ]);
+  }, [isConnected]);
 
   const storeImageToPending = async (fileName: string, imagePath: string) => {
     const pendingImages = await AsyncStorage.getItem(`pendingImages-${tenant}`);
@@ -66,6 +95,9 @@ const TakePictureButton = () => {
   };
 
   const handleImage = async (source: 'camera' | 'gallery') => {
+    let fileData: {uri: string; type: string; name: string};
+    let localFilePath: string;
+
     try {
       setIsProcessing(true);
       const methodMap = {
@@ -117,10 +149,18 @@ const TakePictureButton = () => {
 
       if (!base64 || !path) return;
 
-      const compressImage: any = await compressImageToMaxSize(path, 50 * 1024);
-      const compressedBase64 = await RNFS.readFile(compressImage, 'base64');
+      const resizedImage = await ImageResizer.createResizedImage(
+        path,
+        1000,
+        1000,
+        'JPEG',
+        100,
+      );
+
       const destinationPath = `${RNFS.PicturesDirectoryPath}/${name}`;
-      await RNFS.writeFile(destinationPath, compressedBase64, 'base64');
+      localFilePath = destinationPath;
+      const resizedBase64 = await RNFS.readFile(resizedImage.uri, 'base64');
+      await RNFS.writeFile(destinationPath, resizedBase64, 'base64');
       await RNFS.scanFile(destinationPath);
       const exists = await RNFS.exists(destinationPath);
 
@@ -133,7 +173,7 @@ const TakePictureButton = () => {
         },
       ]);
 
-      const checksum = await generateChecksum(compressedBase64);
+      const checksum = await generateChecksum(resizedBase64);
 
       await setLogger(logger => [
         ...logger,
@@ -156,7 +196,7 @@ const TakePictureButton = () => {
         return;
       }
 
-      const fileData = {
+      fileData = {
         uri: `file://${destinationPath}`,
         type: type,
         name: name,
@@ -177,7 +217,7 @@ const TakePictureButton = () => {
         ...logger,
         {
           key: 'Is Internet Connection Reachable?',
-          value: `${JSON.stringify(netInfo.isInternetReachable)}`,
+          value: `${JSON.stringify(isConnected)}`,
           time: formatDate(new Date()),
         },
       ]);
@@ -186,12 +226,12 @@ const TakePictureButton = () => {
         ...logger,
         {
           key: 'Is Internet Connection Connected?',
-          value: `${JSON.stringify(netInfo.isConnected)}`,
+          value: `${JSON.stringify(isConnected)}`,
           time: formatDate(new Date()),
         },
       ]);
 
-      if (!netInfo.isInternetReachable || !netInfo.isConnected) {
+      if (!isConnected) {
         await setPendingUploads((pendingUploads: string) => [
           ...pendingUploads,
           fileData.uri,
@@ -199,7 +239,7 @@ const TakePictureButton = () => {
         return await storeImageToPending(fileData.name, destinationPath);
       }
 
-      const fileBuffer = Buffer.from(compressedBase64, 'base64');
+      const fileBuffer = Buffer.from(resizedBase64, 'base64');
 
       const uploadParams: any = {
         Bucket: 'ab1-upload-image',
@@ -262,35 +302,14 @@ const TakePictureButton = () => {
           time: formatDate(new Date()),
         },
       ]);
+      if (fileData.name && localFilePath) {
+        await storeImageToPending(fileData.name, localFilePath);
+      }
       return {err};
     } finally {
       setIsProcessing(false);
     }
   };
-
-  // const handleSubmit = async () => {
-  //   try {
-  //     if (capturedImages.length === 0) return;
-
-  //     Alert.alert(
-  //       `Success`,
-  //       `Images has been added`,
-  //       [
-  //         {`
-  //           text: 'OK',
-  //           onPress: () => {
-  //             navigate.navigate('Tasks');
-  //           },
-  //         },
-  //       ],
-  //       {cancelable: false},
-  //     );
-
-  //     setCapturedImages([]);
-  //   } catch (err) {
-  //     console.log('err', err);
-  //   }
-  // };
 
   const renderItem = ({item}: any) => (
     <Image
@@ -317,16 +336,25 @@ const TakePictureButton = () => {
             source={require('../assets/tmp/camera-ico.png')}
           />
         </TouchableOpacity>
-        <FlatList
-          data={capturedImages}
-          renderItem={renderItem}
-          keyExtractor={(item, index) => index.toString()}
-          numColumns={3}
-          contentContainerStyle={styles.grid}
-        />
+        {isProcessing ? (
+          <View style={styles.activityIndicator}>
+            <ActivityIndicator size="large" color="#0000ff" />
+          </View>
+        ) : (
+          <FlatList
+            data={capturedImages}
+            renderItem={renderItem}
+            keyExtractor={(item, index) => index.toString()}
+            numColumns={3}
+            contentContainerStyle={styles.grid}
+          />
+        )}
         <View style={styles.footer}>
           <View style={styles.buttonContainer}>
-            <Button title="Refresh" onPress={() => setCapturedImages([])} />
+            <Button
+              title="Clear images"
+              onPress={() => setCapturedImages([])}
+            />
           </View>
           {/* <View style={styles.buttonContainer}>
             <Button title="Submit" onPress={() => handleSubmit()} />
@@ -417,6 +445,9 @@ const styles = StyleSheet.create({
   selectedText: {
     marginTop: 20,
     fontSize: 18,
+  },
+  activityIndicator: {
+    flex: 1,
   },
 });
 export default TakePictureButton;

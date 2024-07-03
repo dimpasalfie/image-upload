@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {ScrollView, View, Text, StyleSheet, Image, Button} from 'react-native';
 import {GlobalContext} from '../contexts/GlobalContext';
 import {FlatList, GestureHandlerRootView} from 'react-native-gesture-handler';
@@ -13,15 +13,17 @@ const SuccessUploads = () => {
   const [images, setImages] = useState<any[]>([]);
   const tenant = 'agam';
 
+  const getSuccessUploads = async () => {
+    try {
+      const imagesJSON = await AsyncStorage.getItem(`successImages-${tenant}`);
+      const imageList = imagesJSON ? JSON.parse(imagesJSON) : [];
+      setImages(imageList);
+    } catch (error) {
+      console.error('Error retrieving images:', error);
+    }
+  };
+
   useEffect(() => {
-    const getSuccessUploads = async () => {
-      const images =
-        (await AsyncStorage.getItem(`successImages-${tenant}`)) ?? '[]';
-
-      const imageJson: PendingImage[] = JSON.parse(images);
-      setImages(imageJson);
-    };
-
     getSuccessUploads();
   }, []);
 
@@ -34,14 +36,20 @@ const SuccessUploads = () => {
   );
 
   const handleRemoveItems = async () => {
-    await AsyncStorage.removeItem(`successImages-${tenant}`);
+    try {
+      await AsyncStorage.removeItem(`successImages-${tenant}`);
+      setImages([]);
+    } catch (error) {
+      console.error('Error clearing images:', error);
+    }
+  };
+
+  const reloadPage = () => {
+    getSuccessUploads();
   };
 
   return (
     <GestureHandlerRootView style={styles.container}>
-      <View style={styles.button}>
-        <Button title="Clear Images" onPress={handleRemoveItems} />
-      </View>
       {images.length === 0 ? (
         <View style={styles.isEmpty}>
           <Text style={styles.textEmpty}>No Data Available</Text>
@@ -55,6 +63,18 @@ const SuccessUploads = () => {
           contentContainerStyle={styles.grid}
         />
       )}
+      <View style={styles.footer}>
+        <View style={styles.buttonContainer}>
+          <View>
+            <Button title="Reload Page" onPress={reloadPage} />
+          </View>
+        </View>
+        <View style={styles.buttonContainer}>
+          <View>
+            <Button title="Clear Images" onPress={handleRemoveItems} />
+          </View>
+        </View>
+      </View>
     </GestureHandlerRootView>
   );
 };
@@ -114,6 +134,16 @@ const styles = StyleSheet.create({
   },
   textEmpty: {
     fontSize: 30,
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+  },
+  buttonContainer: {
+    flex: 1,
+    marginHorizontal: 5,
   },
 });
 

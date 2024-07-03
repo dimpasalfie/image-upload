@@ -12,6 +12,10 @@ type PendingImage = {
   filePath: string;
 };
 
+type SuccessImage = {
+  Location: string;
+};
+
 const generateChecksum = async (base64: string) => {
   const buffer = Buffer.from(base64, 'base64');
   const wordArray = CryptoJS.lib.WordArray.create(buffer);
@@ -24,6 +28,18 @@ const usePending = () => {
   const {setLogger, setSuccessUploads, setPendingUploads} =
     useContext(GlobalContext);
   const tenant = 'agam';
+
+  const storeToSuccessImages = async (imagePath: string) => {
+    const successImages = await AsyncStorage.getItem(`successImages-${tenant}`);
+
+    const succcessImages = successImages ? JSON.parse(successImages) : [];
+    succcessImages.push(imagePath);
+
+    await AsyncStorage.setItem(
+      `successImages-${tenant}`,
+      JSON.stringify(succcessImages),
+    );
+  };
 
   const getImagePending = async () => {
     if (!tenant) return [];
@@ -77,7 +93,7 @@ const usePending = () => {
       },
     ]);
 
-    const successImages: PendingImage[] = [];
+    const successImages = [];
 
     for (const index in images) {
       const item = images[index];
@@ -121,41 +137,35 @@ const usePending = () => {
 
         const result = await s3.upload(uploadParams).promise();
 
-        await setLogger(logger => [
-          ...logger,
-          {
-            key: 'usePending Upload Result',
-            value: `${JSON.stringify(result)}`,
-            time: formatDate(new Date()),
-          },
-        ]);
-
         if (result.Location) {
-          await setSuccessUploads((successUploads: string) => [
-            ...successUploads,
-            result.Location,
+          await setLogger(logger => [
+            ...logger,
+            {
+              key: 'Storing success uploads from pending',
+              value: `${JSON.stringify(result.Location)}`,
+              time: formatDate(new Date()),
+            },
           ]);
-
-          successImages.push(item);
+          await storeToSuccessImages(result.Location);
+          successImages.push(item.name);
         }
       } catch (err) {
         console.error(`ERROR UPLOADING IMAGE ${item.name}:`, err);
       }
     }
 
-    const successUploadsImgs: PendingImage[] = [];
+    const successUploadsImgs = [];
 
     for (const item of successImages) {
-      if (item) {
-        await setLogger(logger => [
-          ...logger,
-          {
-            key: 'Success Uploads',
-            value: `${JSON.stringify(item)}`,
-            time: formatDate(new Date()),
-          },
-        ]);
-      }
+      await setLogger(logger => [
+        ...logger,
+        {
+          key: 'Success Uploads',
+          value: `${JSON.stringify(item)}`,
+          time: formatDate(new Date()),
+        },
+      ]);
+      successUploadsImgs.push(item);
 
       //   const [_, taskId, name] = item.name.split('/');
 
@@ -173,12 +183,10 @@ const usePending = () => {
       //       time: formattedDate,
       //     },
       //   ]);
-
-      successUploadsImgs.push(item);
     }
-    const successUploadsPaths = successUploadsImgs.map(item => item.filePath);
+    const successUploadsPaths = successUploadsImgs.map(item => item);
     const remainingImages = images.filter(
-      item => !successUploadsPaths.includes(item.filePath),
+      item => !successUploadsPaths.includes(item.name),
     );
 
     await setLogger(logger => [

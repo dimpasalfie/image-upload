@@ -20,6 +20,8 @@ const Logger = () => {
               <View key={index} style={styles.logItem}>
                 <View style={styles.keyValueContainer}>
                   <Text style={styles.key}>{item.key}</Text>
+                </View>
+                <View style={styles.valueContainer}>
                   <Text style={styles.value}>{item.value}</Text>
                 </View>
                 <Text style={styles.time}>{item.time}</Text>
@@ -71,6 +73,9 @@ const styles = StyleSheet.create({
     bottom: 20,
     right: 20,
     zIndex: 9999,
+  },
+  valueContainer: {
+    marginBottom: 5,
   },
 });
 export default Logger;
