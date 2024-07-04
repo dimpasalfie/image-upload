@@ -13,47 +13,28 @@ import {
   launchCamera,
   launchImageLibrary,
 } from 'react-native-image-picker';
-import {useNetInfo} from '@react-native-community/netinfo';
 import RNFS from 'react-native-fs';
 import CryptoJS from 'crypto-js';
 import {Buffer} from 'buffer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {GlobalContext} from '../contexts/GlobalContext';
 import {FlatList, GestureHandlerRootView} from 'react-native-gesture-handler';
-import {compressImageToMaxSize, formatDate} from '../lib';
+import {formatDate} from '../lib';
 import ImageResizer from 'react-native-image-resizer';
-import NetInfo from '@react-native-community/netinfo';
 
 const TakePictureButton = () => {
-  const netInfo = useNetInfo();
   const globalContext = useContext(GlobalContext);
-  const {capturedImages, setCapturedImages, setLogger, s3, setPendingUploads} =
-    globalContext;
+  const {
+    capturedImages,
+    setCapturedImages,
+    setLogger,
+    s3,
+    setPendingUploads,
+    isConnected,
+  } = globalContext;
   const [opened, setOpened] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
   const tenant = 'agam';
-
-  useEffect(() => {
-    NetInfo.addEventListener((state: any) => {
-      if (state.isConnected == false || state.isInternetReachable == false) {
-        setIsConnected(false);
-      } else {
-        setIsConnected(true);
-      }
-    });
-  }, []);
-
-  useEffect(() => {
-    setLogger(logger => [
-      ...logger,
-      {
-        key: 'Checks internet connection',
-        value: `${JSON.stringify(isConnected)}`,
-        time: formatDate(new Date()),
-      },
-    ]);
-  }, [isConnected]);
 
   const storeImageToPending = async (fileName: string, imagePath: string) => {
     const pendingImages = await AsyncStorage.getItem(`pendingImages-${tenant}`);

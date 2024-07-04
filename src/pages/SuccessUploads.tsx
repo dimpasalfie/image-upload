@@ -4,11 +4,6 @@ import {GlobalContext} from '../contexts/GlobalContext';
 import {FlatList, GestureHandlerRootView} from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-type PendingImage = {
-  name: string;
-  filePath: string;
-};
-
 const SuccessUploads = () => {
   const [images, setImages] = useState<any[]>([]);
   const tenant = 'agam';

@@ -17,9 +17,8 @@ import NetInfo from '@react-native-community/netinfo';
 const Tab = createBottomTabNavigator();
 
 function App(): React.JSX.Element {
-  const {tasks, setLogger, formattedDate} = useContext(GlobalContext);
-  const {getImagePending, sendImagePending} = usePending();
-  const [isConnected, setIsConnected] = useState(false);
+  const {setLogger, formattedDate} = useContext(GlobalContext);
+  const {sendImagePending} = usePending();
 
   const initSendPending = async () => {
     const oneMin = 1 * 60 * 1000;
@@ -51,35 +50,34 @@ function App(): React.JSX.Element {
       }
     };
 
+    const checkInternetInfo = async () => {
+      try {
+        const state = await NetInfo.fetch();
+        return state.isConnected && state.isInternetReachable;
+      } catch (error) {
+        return false;
+      }
+    };
+
     const sendPendingInterval = () => {
       setTimeout(async () => {
-        if (isConnected) {
-          log();
-          await sendPending();
-        }
-        sendPendingInterval();
+        checkInternetInfo().then(async connection => {
+          if (connection) {
+            log();
+            await sendPending();
+          }
+          sendPendingInterval();
+        });
       }, oneMin);
     };
 
-    if (isConnected) {
-      await sendPending();
-      sendPendingInterval();
-    }
+    await sendPending();
+    sendPendingInterval();
   };
 
   useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener((state: any) => {
-      setIsConnected(state.isConnected && state.isInternetReachable);
-    });
-
-    unsubscribe();
+    initSendPending();
   }, []);
-
-  useEffect(() => {
-    if (isConnected) {
-      initSendPending();
-    }
-  }, [isConnected]);
 
   return (
     <View style={styles.container}>

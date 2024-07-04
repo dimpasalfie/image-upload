@@ -184,8 +184,10 @@ const usePending = () => {
       //     },
       //   ]);
     }
+
+    const validateImages = await getImagePending();
     const successUploadsPaths = successUploadsImgs.map(item => item);
-    const remainingImages = images.filter(
+    const remainingImages = validateImages.filter(
       item => !successUploadsPaths.includes(item.name),
     );
 
