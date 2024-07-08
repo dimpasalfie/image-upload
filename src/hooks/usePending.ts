@@ -135,9 +135,33 @@ const usePending = () => {
           ContentType: 'application/octet-stream',
         };
 
-        const result = await s3.upload(uploadParams).promise();
+        await setLogger(logger => [
+          ...logger,
+          {
+            key: 'Uploading image from pending',
+            value: '',
+            time: formatDate(new Date()),
+          },
+        ]);
 
-        if (result.Location) {
+        const manager = s3.upload(uploadParams);
+
+        const timeout = new Promise((resolve, reject) => {
+          setTimeout(() => {
+            resolve(null);
+          }, 30000);
+        });
+
+        const send = new Promise((resolve, reject) => {
+          manager.send((err, data) => {
+            if (err) return reject(err);
+            resolve(data);
+          });
+        });
+
+        const result = await Promise.race([timeout, send]);
+
+        if (result?.Location) {
           await setLogger(logger => [
             ...logger,
             {
@@ -148,6 +172,16 @@ const usePending = () => {
           ]);
           await storeToSuccessImages(result.Location);
           successImages.push(item.name);
+        } else {
+          manager.abort();
+          await setLogger(logger => [
+            ...logger,
+            {
+              key: 'Upload image from pending reaches timeout',
+              value: '',
+              time: formatDate(new Date()),
+            },
+          ]);
         }
       } catch (err) {
         console.error(`ERROR UPLOADING IMAGE ${item.name}:`, err);

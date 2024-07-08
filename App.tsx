@@ -44,7 +44,7 @@ function App(): React.JSX.Element {
           {
             key: 'Error initSendPending',
             value: `${JSON.stringify(err)}`,
-            time: formattedDate,
+            time: formatDate(new Date()),
           },
         ]);
       }
@@ -52,6 +52,14 @@ function App(): React.JSX.Element {
 
     const checkInternetInfo = async () => {
       try {
+        await setLogger(logger => [
+          ...logger,
+          {
+            key: 'Getting internet connection',
+            value: '',
+            time: formatDate(new Date()),
+          },
+        ]);
         const state = await NetInfo.fetch();
         return state.isConnected && state.isInternetReachable;
       } catch (error) {
@@ -61,13 +69,18 @@ function App(): React.JSX.Element {
 
     const sendPendingInterval = () => {
       setTimeout(async () => {
-        checkInternetInfo().then(async connection => {
-          if (connection) {
-            log();
-            await sendPending();
-          }
-          sendPendingInterval();
-        });
+        log();
+        const connection = await checkInternetInfo();
+        if (connection) {
+          await sendPending();
+        }
+        // checkInternetInfo().then(async connection => {
+        //   if (connection) {
+        //     log();
+        //     await sendPending();
+        //   }
+        // });
+        sendPendingInterval();
       }, oneMin);
     };
 
@@ -76,7 +89,27 @@ function App(): React.JSX.Element {
   };
 
   useEffect(() => {
+    setLogger(logger => [
+      ...logger,
+      {
+        key: 'On mount',
+        value: '',
+        time: formatDate(new Date()),
+      },
+    ]);
+
     initSendPending();
+
+    return () => {
+      setLogger(logger => [
+        ...logger,
+        {
+          key: 'Cleanup effect from initSendPending',
+          value: '',
+          time: formatDate(new Date()),
+        },
+      ]);
+    };
   }, []);
 
   return (
